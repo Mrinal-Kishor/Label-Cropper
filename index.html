@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browser Label Cropper</title>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen flex flex-col items-center py-10">
+
+    <div class="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md">
+        <h1 class="text-2xl font-bold text-center mb-6 text-blue-600">Quick Crop (No Server)</h1>
+        
+        <div class="grid grid-cols-3 gap-2 mb-6">
+            <button onclick="setPlatform(0.455, this)" class="plat-btn bg-blue-600 text-white py-2 rounded text-sm">Flipkart</button>
+            <button onclick="setPlatform(0.48, this)" class="plat-btn bg-gray-200 text-gray-700 py-2 rounded text-sm">Meesho</button>
+            <button onclick="setPlatform(0.42, this)" class="plat-btn bg-gray-200 text-gray-700 py-2 rounded text-sm">Amazon</button>
+        </div>
+
+        <div id="dropzone" class="border-2 border-dashed border-gray-300 rounded-xl p-10 text-center cursor-pointer hover:border-blue-500 bg-gray-50">
+            <input type="file" id="fileInput" class="hidden" accept="application/pdf">
+            <p class="text-gray-500">Tap to select Invoice PDF</p>
+        </div>
+
+        <div id="status" class="mt-4 text-center text-sm font-medium hidden"></div>
+    </div>
+
+    <script>
+        let cropFactor = 0.455; // Default Flipkart
+
+        function setPlatform(factor, btn) {
+            cropFactor = factor;
+            document.querySelectorAll('.plat-btn').forEach(b => {
+                b.classList.replace('bg-blue-600', 'bg-gray-200');
+                b.classList.replace('text-white', 'text-gray-700');
+            });
+            btn.classList.replace('bg-gray-200', 'bg-blue-600');
+            btn.classList.replace('text-gray-700', 'text-white');
+        }
+
+        const fileInput = document.getElementById('fileInput');
+        const dropzone = document.getElementById('dropzone');
+        const status = document.getElementById('status');
+
+        dropzone.onclick = () => fileInput.click();
+
+        fileInput.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            status.innerText = "Processing...";
+            status.classList.remove('hidden', 'text-red-500');
+
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
+                const croppedPdf = await PDFLib.PDFDocument.create();
+
+                const pages = pdfDoc.getPages();
+                
+                for (let i = 0; i < pages.length; i++) {
+                    // Copy page
+                    const [copiedPage] = await croppedPdf.copyPages(pdfDoc, [i]);
+                    const { width, height } = copiedPage.getSize();
+
+                    // Apply the Crop: Keep the top portion (y-axis starts from bottom)
+                    // So we set the 'Bottom' of the crop box to (Height * (1 - cropFactor))
+                    copiedPage.setCropBox(0, height * (1 - cropFactor), width, height);
+                    
+                    croppedPdf.addPage(copiedPage);
+                }
+
+                const pdfBytes = await croppedPdf.save();
+                download(pdfBytes, "labels_cropped.pdf", "application/pdf");
+                status.innerText = "✅ Done! Downloaded.";
+            } catch (err) {
+                console.error(err);
+                status.innerText = "❌ Error processing PDF";
+                status.classList.add('text-red-500');
+            }
+        };
+
+        // Simple download helper
+        function download(data, filename, type) {
+            const file = new Blob([data], { type: type });
+            const a = document.createElement("a");
+            const url = URL.createObjectURL(file);
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            }, 0);
+        }
+    </script>
+</body>
+</html>
